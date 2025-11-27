@@ -28,6 +28,9 @@ curl -sSL "$REPO_URL/aqi-native-macos.swift" -o "$INSTALL_DIR/aqi-menubar.swift"
 echo "Compiling..."
 swiftc -o "$INSTALL_DIR/aqi-menubar" "$INSTALL_DIR/aqi-menubar.swift"
 
+# Remove quarantine attribute to avoid Gatekeeper warning
+xattr -cr "$INSTALL_DIR/aqi-menubar" 2>/dev/null || true
+
 echo "Setting up auto-start..."
 mkdir -p "$HOME/Library/LaunchAgents"
 
