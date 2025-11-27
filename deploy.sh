@@ -39,7 +39,7 @@ fi
 
 # Health check
 echo -e "${YELLOW}🏥 Running health check...${NC}"
-HEALTH_RESPONSE=$(curl -s http://localhost:3000/health || echo "failed")
+HEALTH_RESPONSE=$(curl -s http://localhost:3001/health || echo "failed")
 
 if echo "$HEALTH_RESPONSE" | grep -q "ok"; then
     echo -e "${GREEN}✅ Health check passed${NC}"
@@ -52,6 +52,6 @@ fi
 
 echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
 echo ""
-echo "Dashboard: http://localhost:3000"
-echo "API Docs:  http://localhost:3000/docs"
-echo "Health:    http://localhost:3000/health"
+echo "Dashboard: http://localhost:3001"
+echo "API Docs:  http://localhost:3001/docs"
+echo "Health:    http://localhost:3001/health"
