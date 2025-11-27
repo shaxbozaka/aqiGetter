@@ -277,42 +277,69 @@
             margin-bottom: 16px;
         }
 
-        .scale-bar {
+        .scale-items {
             display: flex;
-            border-radius: 8px;
-            overflow: hidden;
-            height: 12px;
-            margin-bottom: 12px;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .scale-segment {
+        .scale-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+
+        .scale-item:hover {
+            background: #f8fafc;
+        }
+
+        .scale-item.active {
+            background: #f1f5f9;
+        }
+
+        .scale-color {
+            width: 12px;
+            height: 40px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+
+        .scale-color.good { background: #22c55e; }
+        .scale-color.moderate { background: #eab308; }
+        .scale-color.sensitive { background: #f97316; }
+        .scale-color.unhealthy { background: #ef4444; }
+        .scale-color.very-unhealthy { background: #a855f7; }
+        .scale-color.hazardous { background: #881337; }
+
+        .scale-info {
             flex: 1;
-            position: relative;
         }
 
-        .scale-segment.good { background: #22c55e; }
-        .scale-segment.moderate { background: #eab308; }
-        .scale-segment.sensitive { background: #f97316; }
-        .scale-segment.unhealthy { background: #ef4444; }
-        .scale-segment.very-unhealthy { background: #a855f7; }
-        .scale-segment.hazardous { background: #881337; }
-
-        .scale-marker {
-            position: absolute;
-            top: -8px;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 28px;
-            background: #1e293b;
-            border-radius: 2px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        .scale-range {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
         }
 
-        .scale-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
+        .scale-label {
+            font-size: 13px;
             color: #64748b;
+            margin-top: 2px;
+        }
+
+        .scale-check {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #1e293b;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
         }
 
         /* Footer */
@@ -472,20 +499,50 @@
 
         <!-- AQI Scale Reference -->
         <div class="scale-card">
-            <div class="scale-title">AQI Scale</div>
-            <div class="scale-bar" id="scaleBar">
-                <div class="scale-segment good"></div>
-                <div class="scale-segment moderate"></div>
-                <div class="scale-segment sensitive"></div>
-                <div class="scale-segment unhealthy"></div>
-                <div class="scale-segment very-unhealthy"></div>
-                <div class="scale-segment hazardous"></div>
-            </div>
-            <div class="scale-labels">
-                <span>Good</span>
-                <span>Moderate</span>
-                <span>Unhealthy</span>
-                <span>Hazardous</span>
+            <div class="scale-title">What do the numbers mean?</div>
+            <div class="scale-items" id="scaleItems">
+                <div class="scale-item" data-max="50">
+                    <div class="scale-color good"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">0 - 50</div>
+                        <div class="scale-label">Good - Air quality is satisfactory</div>
+                    </div>
+                </div>
+                <div class="scale-item" data-max="100">
+                    <div class="scale-color moderate"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">51 - 100</div>
+                        <div class="scale-label">Moderate - Acceptable for most people</div>
+                    </div>
+                </div>
+                <div class="scale-item" data-max="150">
+                    <div class="scale-color sensitive"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">101 - 150</div>
+                        <div class="scale-label">Unhealthy for sensitive groups</div>
+                    </div>
+                </div>
+                <div class="scale-item" data-max="200">
+                    <div class="scale-color unhealthy"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">151 - 200</div>
+                        <div class="scale-label">Unhealthy - Everyone may feel effects</div>
+                    </div>
+                </div>
+                <div class="scale-item" data-max="300">
+                    <div class="scale-color very-unhealthy"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">201 - 300</div>
+                        <div class="scale-label">Very Unhealthy - Health alert</div>
+                    </div>
+                </div>
+                <div class="scale-item" data-max="500">
+                    <div class="scale-color hazardous"></div>
+                    <div class="scale-info">
+                        <div class="scale-range">301 - 500</div>
+                        <div class="scale-label">Hazardous - Emergency conditions</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -566,22 +623,26 @@
             `).join('');
         }
 
-        function updateScaleMarker(aqi) {
-            const existingMarker = document.querySelector('.scale-marker');
-            if (existingMarker) existingMarker.remove();
+        function updateScaleHighlight(aqi) {
+            const items = document.querySelectorAll('.scale-item');
+            items.forEach(item => {
+                item.classList.remove('active');
+                const check = item.querySelector('.scale-check');
+                if (check) check.remove();
+            });
 
-            const percentage = Math.min((aqi / 300) * 100, 100);
-            const segmentIndex = Math.min(Math.floor(percentage / (100 / 6)), 5);
-            const segments = document.querySelectorAll('.scale-segment');
+            const thresholds = [50, 100, 150, 200, 300, 500];
+            let activeIndex = thresholds.findIndex(t => aqi <= t);
+            if (activeIndex === -1) activeIndex = thresholds.length - 1;
 
-            const marker = document.createElement('div');
-            marker.className = 'scale-marker';
-
-            const segmentWidth = 100 / 6;
-            const positionInSegment = (percentage % segmentWidth) / segmentWidth * 100;
-            marker.style.left = `${positionInSegment}%`;
-
-            segments[segmentIndex].appendChild(marker);
+            const activeItem = items[activeIndex];
+            if (activeItem) {
+                activeItem.classList.add('active');
+                const check = document.createElement('div');
+                check.className = 'scale-check';
+                check.innerHTML = '✓';
+                activeItem.appendChild(check);
+            }
         }
 
         function formatTime(date) {
@@ -726,8 +787,8 @@
                     // Update health tips
                     updateHealthTips(aqi);
 
-                    // Update scale marker
-                    updateScaleMarker(aqi);
+                    // Update scale highlight
+                    updateScaleHighlight(aqi);
                 }
 
                 if (historical && historical.length > 0) {
