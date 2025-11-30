@@ -125,18 +125,30 @@ class AQIMenuBar: NSObject {
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let dataObj = json["data"] as? [String: Any] {
 
+                // Handle AQI as Int or String
                 if let aqiValue = dataObj["aqi_us"] as? Int {
                     aqi = aqiValue
                     status = self.getStatus(aqi: aqi)
+                } else if let aqiStr = dataObj["aqi_us"] as? String, let aqiValue = Int(aqiStr) {
+                    aqi = aqiValue
+                    status = self.getStatus(aqi: aqi)
+                } else if let aqiStr = dataObj["aqi_us"] as? String {
+                    // Custom string value - display as-is
+                    aqi = -1  // Flag for custom string
+                    status = aqiStr
                 }
 
+                // Handle temperature as String or Double
                 if let tempValue = dataObj["temperature_celsius"] as? String,
                    let tempDouble = Double(tempValue) {
                     temp = tempDouble
                 } else if let tempValue = dataObj["temperature_celsius"] as? Double {
                     temp = tempValue
+                } else if let tempValue = dataObj["temperature_celsius"] as? Int {
+                    temp = Double(tempValue)
                 }
 
+                // Handle wind as String or Double
                 if let windValue = dataObj["wind_speed_ms"] as? String,
                    let windDouble = Double(windValue) {
                     wind = windDouble * 3.6 // Convert to km/h
@@ -144,7 +156,10 @@ class AQIMenuBar: NSObject {
                     wind = windValue * 3.6
                 }
 
+                // Handle humidity as Int or String
                 if let humidityValue = dataObj["humidity"] as? Int {
+                    humidity = humidityValue
+                } else if let humidityStr = dataObj["humidity"] as? String, let humidityValue = Int(humidityStr) {
                     humidity = humidityValue
                 }
             }
@@ -167,7 +182,10 @@ class AQIMenuBar: NSObject {
             DispatchQueue.main.async {
                 let emoji = self.getEmoji(aqi: aqi)
                 let trend = self.getTrendArrow(oldAQI: oldAQI, newAQI: aqi)
-                self.statusItem.button?.title = "\(Int(temp))° · \(aqi)\(trend) \(emoji)"
+
+                // Display custom string or number
+                let aqiDisplay = (aqi == -1) ? status : "\(aqi)\(trend)"
+                self.statusItem.button?.title = "\(Int(temp))° · \(aqiDisplay) \(emoji)"
 
                 // Create menu
                 self.buildMenu(aqi: aqi, temp: temp, wind: wind, humidity: humidity, status: status)
