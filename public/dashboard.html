@@ -207,14 +207,15 @@
             background: #f1f5f9;
             padding: 4px;
             border-radius: 10px;
+            flex-wrap: wrap;
         }
 
         .period-btn {
-            padding: 8px 14px;
+            padding: 8px 12px;
             border: none;
             background: transparent;
             border-radius: 8px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 500;
             color: #64748b;
             cursor: pointer;
@@ -229,6 +230,65 @@
             background: white;
             color: #1e293b;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        /* Comparison Card */
+        .comparison-card {
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .comparison-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 16px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .comparison-item {
+            text-align: center;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+
+        .comparison-label {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
+        .comparison-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .comparison-change {
+            font-size: 12px;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .change-better {
+            color: #22c55e;
+        }
+
+        .change-worse {
+            color: #ef4444;
+        }
+
+        .change-same {
+            color: #64748b;
         }
 
         .chart-container {
@@ -422,7 +482,20 @@
             }
 
             .trend-period {
-                display: none;
+                justify-content: center;
+            }
+
+            .comparison-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .comparison-item {
+                padding: 12px;
+            }
+
+            .comparison-value {
+                font-size: 20px;
             }
         }
     </style>
@@ -468,14 +541,39 @@
             </div>
         </div>
 
+        <!-- Comparison Stats -->
+        <div class="comparison-card">
+            <div class="comparison-title">AQI Comparison</div>
+            <div class="comparison-grid">
+                <div class="comparison-item">
+                    <div class="comparison-label">Today</div>
+                    <div class="comparison-value" id="todayAqi">--</div>
+                    <div class="comparison-change" id="todayChange">vs yesterday</div>
+                </div>
+                <div class="comparison-item">
+                    <div class="comparison-label">This Week</div>
+                    <div class="comparison-value" id="weekAqi">--</div>
+                    <div class="comparison-change" id="weekChange">vs last week</div>
+                </div>
+                <div class="comparison-item">
+                    <div class="comparison-label">This Month</div>
+                    <div class="comparison-value" id="monthAqi">--</div>
+                    <div class="comparison-change" id="monthChange">vs last month</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Trend Chart -->
         <div class="trend-card">
             <div class="trend-header">
                 <div class="trend-title">Air Quality Trend</div>
                 <div class="trend-period">
-                    <button class="period-btn active" onclick="changeTimeRange(6)">6h</button>
-                    <button class="period-btn" onclick="changeTimeRange(24)">24h</button>
-                    <button class="period-btn" onclick="changeTimeRange(72)">3d</button>
+                    <button class="period-btn active" data-hours="6">6h</button>
+                    <button class="period-btn" data-hours="24">24h</button>
+                    <button class="period-btn" data-hours="72">3d</button>
+                    <button class="period-btn" data-period="week">Week</button>
+                    <button class="period-btn" data-period="month">Month</button>
+                    <button class="period-btn" data-period="year">Year</button>
                 </div>
             </div>
             <div class="chart-container">
@@ -555,7 +653,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         let trendChart;
-        let currentRange = 6;
+        let currentMode = 'hours'; // 'hours' or 'period'
+        let currentHours = 6;
+        let currentPeriod = 'week';
 
         const aqiLevels = [
             { max: 50, label: 'Good', class: 'aqi-good', recommendation: 'Air quality is great! Perfect day for outdoor activities.', color: '#22c55e' },
@@ -665,16 +765,93 @@
             return result.data || [];
         }
 
-        function createTrendChart(data) {
+        async function fetchAggregatedData(period) {
+            const granularity = period === 'year' ? 'week' : 'day';
+            const response = await fetch(`/api/aqi/history?period=${period}&granularity=${granularity}`);
+            const result = await response.json();
+            return result.data || [];
+        }
+
+        async function fetchComparisonData() {
+            const response = await fetch('/api/aqi/comparison');
+            const result = await response.json();
+            return result.data || {};
+        }
+
+        function getChangeText(current, previous, label) {
+            if (!current || !previous) return { text: `vs ${label}`, class: 'change-same' };
+            const diff = current - previous;
+            if (diff < 0) {
+                return { text: `${Math.abs(diff)} better than ${label}`, class: 'change-better' };
+            } else if (diff > 0) {
+                return { text: `${diff} worse than ${label}`, class: 'change-worse' };
+            }
+            return { text: `Same as ${label}`, class: 'change-same' };
+        }
+
+        async function loadComparisonData() {
+            try {
+                const data = await fetchComparisonData();
+
+                // Today vs Yesterday
+                if (data.today) {
+                    document.getElementById('todayAqi').textContent = data.today.avg_aqi || '--';
+                    const todayChange = getChangeText(data.today.avg_aqi, data.yesterday?.avg_aqi, 'yesterday');
+                    const todayEl = document.getElementById('todayChange');
+                    todayEl.textContent = todayChange.text;
+                    todayEl.className = `comparison-change ${todayChange.class}`;
+                }
+
+                // This Week vs Last Week
+                if (data.this_week) {
+                    document.getElementById('weekAqi').textContent = data.this_week.avg_aqi || '--';
+                    const weekChange = getChangeText(data.this_week.avg_aqi, data.last_week?.avg_aqi, 'last week');
+                    const weekEl = document.getElementById('weekChange');
+                    weekEl.textContent = weekChange.text;
+                    weekEl.className = `comparison-change ${weekChange.class}`;
+                }
+
+                // This Month vs Last Month
+                if (data.this_month) {
+                    document.getElementById('monthAqi').textContent = data.this_month.avg_aqi || '--';
+                    const monthChange = getChangeText(data.this_month.avg_aqi, data.last_month?.avg_aqi, 'last month');
+                    const monthEl = document.getElementById('monthChange');
+                    monthEl.textContent = monthChange.text;
+                    monthEl.className = `comparison-change ${monthChange.class}`;
+                }
+            } catch (error) {
+                console.error('Error loading comparison data:', error);
+            }
+        }
+
+        function formatDate(date, period) {
+            const d = new Date(date);
+            if (period === 'year') {
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            } else if (period === 'month' || period === 'week') {
+                return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            }
+            return formatTime(date);
+        }
+
+        function createTrendChart(data, isAggregated = false, period = 'week') {
             const ctx = document.getElementById('trendChart').getContext('2d');
 
             if (trendChart) {
                 trendChart.destroy();
             }
 
-            const sortedData = [...data].reverse();
-            const labels = sortedData.map(d => formatTime(d.timestamp));
-            const values = sortedData.map(d => d.aqi_us);
+            let sortedData, labels, values;
+
+            if (isAggregated) {
+                sortedData = data; // Already sorted ASC from API
+                labels = sortedData.map(d => formatDate(d.time_bucket, period));
+                values = sortedData.map(d => parseInt(d.avg_aqi));
+            } else {
+                sortedData = [...data].reverse();
+                labels = sortedData.map(d => formatTime(d.timestamp));
+                values = sortedData.map(d => d.aqi_us);
+            }
 
             // Calculate gradient based on values
             const gradient = ctx.createLinearGradient(0, 0, 0, 200);
@@ -751,21 +928,41 @@
             }
         }
 
-        async function changeTimeRange(hours) {
-            currentRange = hours;
-            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+        async function changeTimeRange(btn, hours = null, period = null) {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
 
-            const data = await fetchHistoricalData(hours);
-            createTrendChart(data);
+            if (hours) {
+                currentMode = 'hours';
+                currentHours = hours;
+                const data = await fetchHistoricalData(hours);
+                createTrendChart(data, false);
+            } else if (period) {
+                currentMode = 'period';
+                currentPeriod = period;
+                const data = await fetchAggregatedData(period);
+                createTrendChart(data, true, period);
+            }
         }
+
+        // Setup period button click handlers
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const hours = this.dataset.hours ? parseInt(this.dataset.hours) : null;
+                const period = this.dataset.period || null;
+                changeTimeRange(this, hours, period);
+            });
+        });
 
         async function loadDashboard() {
             try {
                 const [current, historical] = await Promise.all([
                     fetchCurrentData(),
-                    fetchHistoricalData(currentRange)
+                    fetchHistoricalData(currentHours)
                 ]);
+
+                // Load comparison data
+                loadComparisonData();
 
                 if (current) {
                     const aqi = current.aqi_us;
@@ -792,7 +989,7 @@
                 }
 
                 if (historical && historical.length > 0) {
-                    createTrendChart(historical);
+                    createTrendChart(historical, false);
                 }
 
                 // Update time

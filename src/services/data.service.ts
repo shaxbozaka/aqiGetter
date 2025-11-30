@@ -119,6 +119,137 @@ class DataService {
     const result = await pool.query(query, [city]);
     return result.rows[0];
   }
+
+  async getAggregatedData(city: string, period: 'week' | 'month' | 'year', granularity: 'hour' | 'day' | 'week') {
+    let interval: string;
+    let truncate: string;
+
+    switch (period) {
+      case 'week':
+        interval = '7 days';
+        break;
+      case 'month':
+        interval = '30 days';
+        break;
+      case 'year':
+        interval = '365 days';
+        break;
+    }
+
+    switch (granularity) {
+      case 'hour':
+        truncate = 'hour';
+        break;
+      case 'day':
+        truncate = 'day';
+        break;
+      case 'week':
+        truncate = 'week';
+        break;
+    }
+
+    const query = `
+      SELECT
+        DATE_TRUNC('${truncate}', timestamp) as time_bucket,
+        ROUND(AVG(aqi_us)) as avg_aqi,
+        MAX(aqi_us) as max_aqi,
+        MIN(aqi_us) as min_aqi,
+        ROUND(AVG(temperature_celsius)) as avg_temp,
+        ROUND(AVG(humidity)) as avg_humidity,
+        COUNT(*) as data_points
+      FROM air_quality_data
+      WHERE city = $1
+        AND timestamp >= NOW() - INTERVAL '${interval}'
+      GROUP BY time_bucket
+      ORDER BY time_bucket ASC
+    `;
+
+    const result = await pool.query(query, [city]);
+    return result.rows;
+  }
+
+  async getComparisonStats(city: string) {
+    const query = `
+      WITH periods AS (
+        SELECT
+          'today' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1 AND timestamp >= CURRENT_DATE
+
+        UNION ALL
+
+        SELECT
+          'yesterday' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1 AND timestamp >= CURRENT_DATE - INTERVAL '1 day' AND timestamp < CURRENT_DATE
+
+        UNION ALL
+
+        SELECT
+          'this_week' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1 AND timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+
+        UNION ALL
+
+        SELECT
+          'last_week' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1
+          AND timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+          AND timestamp < DATE_TRUNC('week', CURRENT_DATE)
+
+        UNION ALL
+
+        SELECT
+          'this_month' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1 AND timestamp >= DATE_TRUNC('month', CURRENT_DATE)
+
+        UNION ALL
+
+        SELECT
+          'last_month' as period,
+          ROUND(AVG(aqi_us)) as avg_aqi,
+          MAX(aqi_us) as max_aqi,
+          MIN(aqi_us) as min_aqi
+        FROM air_quality_data
+        WHERE city = $1
+          AND timestamp >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month'
+          AND timestamp < DATE_TRUNC('month', CURRENT_DATE)
+      )
+      SELECT * FROM periods
+    `;
+
+    const result = await pool.query(query, [city]);
+
+    // Convert to object for easier access
+    const stats: Record<string, any> = {};
+    result.rows.forEach(row => {
+      stats[row.period] = {
+        avg_aqi: row.avg_aqi,
+        max_aqi: row.max_aqi,
+        min_aqi: row.min_aqi
+      };
+    });
+
+    return stats;
+  }
 }
 
 export default new DataService();

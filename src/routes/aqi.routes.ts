@@ -128,6 +128,66 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   });
+
+  // Get aggregated historical data (week/month/year)
+  fastify.get('/aqi/history', {
+    schema: {
+      description: 'Get aggregated AQI data for longer periods',
+      tags: ['AQI'],
+      querystring: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', default: 'Tashkent' },
+          period: { type: 'string', enum: ['week', 'month', 'year'], default: 'week' },
+          granularity: { type: 'string', enum: ['hour', 'day', 'week'], default: 'day' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { city = 'Tashkent', period = 'week', granularity = 'day' } = request.query as {
+      city?: string;
+      period?: 'week' | 'month' | 'year';
+      granularity?: 'hour' | 'day' | 'week';
+    };
+
+    try {
+      const data = await dataService.getAggregatedData(city, period, granularity);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch historical data',
+      });
+    }
+  });
+
+  // Get comparison statistics
+  fastify.get('/aqi/comparison', {
+    schema: {
+      description: 'Get AQI comparison stats (today vs yesterday, this week vs last week, etc.)',
+      tags: ['AQI'],
+      querystring: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', default: 'Tashkent' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { city = 'Tashkent' } = request.query as { city?: string };
+
+    try {
+      const data = await dataService.getComparisonStats(city);
+      return reply.send({ success: true, data });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch comparison data',
+      });
+    }
+  });
 };
 
 export default aqiRoutes;
