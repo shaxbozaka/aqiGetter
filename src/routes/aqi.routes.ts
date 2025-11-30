@@ -100,7 +100,7 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // Get current AQI
+  // Get current AQI (real data for dashboard)
   fastify.get('/aqi/current', {
     schema: {
       description: 'Get the most recent AQI reading',
@@ -123,7 +123,33 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
           error: 'No data found',
         });
       }
-      // Apply admin overrides if enabled
+      // Return real data (no overrides)
+      return reply.send({ success: true, data: data[0] });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch data',
+      });
+    }
+  });
+
+  // Get current AQI for indicator (with admin overrides)
+  fastify.get('/aqi/indicator', {
+    schema: {
+      description: 'Get AQI for menubar indicator (supports admin overrides)',
+      tags: ['AQI'],
+    },
+  }, async (request, reply) => {
+    try {
+      const data = await dataService.getLatestData('Tashkent', 1);
+      if (data.length === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: 'No data found',
+        });
+      }
+      // Apply admin overrides for indicator only
       const result = settingsService.applyOverrides(data[0]);
       return reply.send({ success: true, data: result });
     } catch (error) {

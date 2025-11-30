@@ -1,10 +1,11 @@
 // Admin settings service - stores override values for display
+// All values are strings to allow custom text like "N/A", "Error", etc.
 interface OverrideSettings {
   enabled: boolean;
-  aqi?: number;
-  temperature?: number;
-  humidity?: number;
-  windSpeed?: number;
+  aqi?: string | number;
+  temperature?: string | number;
+  humidity?: string | number;
+  windSpeed?: string | number;
 }
 
 class SettingsService {
