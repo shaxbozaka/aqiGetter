@@ -181,38 +181,50 @@ class DataService {
   }
 
   async getComparisonStats(city: string) {
+    // Compare same time windows:
+    // - Today (midnight to now) vs Yesterday (midnight to same hour)
+    // - This week (start of week to now) vs Last week (same days/hours)
+    // - This month (start of month to now) vs Last month (same days/hours)
     const query = `
       WITH periods AS (
+        -- Today: from midnight to now
         SELECT
           'today' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
           MAX(aqi_us) as max_aqi,
           MIN(aqi_us) as min_aqi
         FROM air_quality_data
-        WHERE city = $1 AND timestamp >= CURRENT_DATE
+        WHERE city = $1 AND timestamp >= CURRENT_DATE AND timestamp <= NOW()
 
         UNION ALL
 
+        -- Yesterday: same hours (midnight to current time of day)
         SELECT
           'yesterday' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
           MAX(aqi_us) as max_aqi,
           MIN(aqi_us) as min_aqi
         FROM air_quality_data
-        WHERE city = $1 AND timestamp >= CURRENT_DATE - INTERVAL '1 day' AND timestamp < CURRENT_DATE
+        WHERE city = $1
+          AND timestamp >= CURRENT_DATE - INTERVAL '1 day'
+          AND timestamp <= CURRENT_DATE - INTERVAL '1 day' + (NOW() - CURRENT_DATE)
 
         UNION ALL
 
+        -- This week: from start of week to now
         SELECT
           'this_week' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
           MAX(aqi_us) as max_aqi,
           MIN(aqi_us) as min_aqi
         FROM air_quality_data
-        WHERE city = $1 AND timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+        WHERE city = $1
+          AND timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+          AND timestamp <= NOW()
 
         UNION ALL
 
+        -- Last week: same days and hours
         SELECT
           'last_week' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
@@ -221,20 +233,24 @@ class DataService {
         FROM air_quality_data
         WHERE city = $1
           AND timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
-          AND timestamp < DATE_TRUNC('week', CURRENT_DATE)
+          AND timestamp <= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days' + (NOW() - DATE_TRUNC('week', CURRENT_DATE))
 
         UNION ALL
 
+        -- This month: from start of month to now
         SELECT
           'this_month' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
           MAX(aqi_us) as max_aqi,
           MIN(aqi_us) as min_aqi
         FROM air_quality_data
-        WHERE city = $1 AND timestamp >= DATE_TRUNC('month', CURRENT_DATE)
+        WHERE city = $1
+          AND timestamp >= DATE_TRUNC('month', CURRENT_DATE)
+          AND timestamp <= NOW()
 
         UNION ALL
 
+        -- Last month: same days and hours
         SELECT
           'last_month' as period,
           ROUND(AVG(aqi_us)) as avg_aqi,
@@ -243,7 +259,7 @@ class DataService {
         FROM air_quality_data
         WHERE city = $1
           AND timestamp >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month'
-          AND timestamp < DATE_TRUNC('month', CURRENT_DATE)
+          AND timestamp <= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month' + (NOW() - DATE_TRUNC('month', CURRENT_DATE))
       )
       SELECT * FROM periods
     `;
