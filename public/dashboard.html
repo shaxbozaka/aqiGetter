@@ -958,10 +958,13 @@
 
         async function loadDashboard() {
             try {
-                const [current, historical] = await Promise.all([
-                    fetchCurrentData(),
-                    fetchHistoricalData(currentHours)
-                ]);
+                // Fetch current data and chart data based on current mode
+                const currentPromise = fetchCurrentData();
+                const chartPromise = currentMode === 'hours'
+                    ? fetchHistoricalData(currentHours)
+                    : fetchAggregatedData(currentPeriod);
+
+                const [current, chartData] = await Promise.all([currentPromise, chartPromise]);
 
                 // Load comparison data
                 loadComparisonData();
@@ -990,8 +993,9 @@
                     updateScaleHighlight(aqi);
                 }
 
-                if (historical && historical.length > 0) {
-                    createTrendChart(historical, false);
+                // Update chart with the fetched data
+                if (chartData && chartData.length > 0) {
+                    createTrendChart(chartData, currentMode === 'period', currentPeriod);
                 }
 
                 // Update time
