@@ -12,14 +12,17 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
         properties: {
           city: { type: 'string', default: 'Tashkent' },
           limit: { type: 'number', default: 10 },
+          hours: { type: 'number', description: 'Get data from last N hours (overrides limit)' },
         },
       },
     },
   }, async (request, reply) => {
-    const { city = 'Tashkent', limit = 10 } = request.query as { city?: string; limit?: number };
+    const { city = 'Tashkent', limit = 10, hours } = request.query as { city?: string; limit?: number; hours?: number };
 
     try {
-      const data = await dataService.getLatestData(city, limit);
+      const data = hours
+        ? await dataService.getDataByHours(city, hours)
+        : await dataService.getLatestData(city, limit);
       return reply.send({ success: true, data });
     } catch (error) {
       fastify.log.error(error);

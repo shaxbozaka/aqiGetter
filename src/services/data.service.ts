@@ -92,6 +92,18 @@ class DataService {
     return result.rows;
   }
 
+  async getDataByHours(city: string, hours: number) {
+    const query = `
+      SELECT * FROM air_quality_data
+      WHERE city = $1
+        AND timestamp >= NOW() - INTERVAL '${hours} hours'
+      ORDER BY timestamp DESC
+    `;
+
+    const result = await pool.query(query, [city]);
+    return result.rows;
+  }
+
   async getDataByDateRange(city: string, startDate: Date, endDate: Date) {
     const query = `
       SELECT * FROM air_quality_data

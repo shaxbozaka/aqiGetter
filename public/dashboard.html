@@ -760,7 +760,7 @@
         }
 
         async function fetchHistoricalData(hours) {
-            const response = await fetch(`/api/aqi/latest?limit=${hours * 5}`);
+            const response = await fetch(`/api/aqi/latest?hours=${hours}`);
             const result = await response.json();
             return result.data || [];
         }
