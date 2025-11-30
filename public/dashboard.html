@@ -1026,7 +1026,8 @@
                     // Update stats
                     document.getElementById('temperature').textContent = `${Math.round(current.temperature_celsius)}°C`;
                     document.getElementById('humidity').textContent = `${current.humidity}%`;
-                    document.getElementById('wind').textContent = `${current.wind_speed_ms || '--'} m/s`;
+                    const windKmh = current.wind_speed_ms ? (current.wind_speed_ms * 3.6).toFixed(1) : '--';
+                    document.getElementById('wind').textContent = `${windKmh} km/h`;
 
                     // Update health tips
                     updateHealthTips(aqi);
