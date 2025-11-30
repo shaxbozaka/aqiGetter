@@ -1009,8 +1009,37 @@
         // Initial load
         loadDashboard();
 
-        // Refresh every 2 minutes
-        setInterval(loadDashboard, 120000);
+        // Setup Server-Sent Events for real-time updates
+        function setupSSE() {
+            const eventSource = new EventSource('/api/aqi/stream');
+
+            eventSource.addEventListener('connected', () => {
+                console.log('SSE connected');
+            });
+
+            eventSource.addEventListener('update', (event) => {
+                console.log('New data received:', event.data);
+                // Reload dashboard when new data arrives
+                loadDashboard();
+            });
+
+            eventSource.addEventListener('heartbeat', () => {
+                // Connection is alive
+            });
+
+            eventSource.onerror = () => {
+                console.log('SSE connection lost, reconnecting...');
+                eventSource.close();
+                // Reconnect after 5 seconds
+                setTimeout(setupSSE, 5000);
+            };
+        }
+
+        // Start SSE connection
+        setupSSE();
+
+        // Fallback refresh every 5 minutes (in case SSE fails)
+        setInterval(loadDashboard, 300000);
     </script>
 </body>
 </html>
