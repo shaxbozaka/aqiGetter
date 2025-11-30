@@ -781,10 +781,11 @@
         function getChangeText(current, previous, label) {
             if (!current || !previous) return { text: `vs ${label}`, class: 'change-same' };
             const diff = current - previous;
-            if (diff < 0) {
-                return { text: `${Math.abs(diff)} better than ${label}`, class: 'change-better' };
-            } else if (diff > 0) {
+            // Lower AQI = better, so positive diff means worse air quality
+            if (diff > 0) {
                 return { text: `${diff} worse than ${label}`, class: 'change-worse' };
+            } else if (diff < 0) {
+                return { text: `${Math.abs(diff)} better than ${label}`, class: 'change-better' };
             }
             return { text: `Same as ${label}`, class: 'change-same' };
         }
