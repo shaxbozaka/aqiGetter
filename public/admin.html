@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQI Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .login-form, .admin-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 16px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #4f46e5;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #4338ca;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: #fff;
+            margin-top: 10px;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: #22c55e;
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .toggle-label {
+            font-weight: 600;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.2);
+            transition: 0.3s;
+            border-radius: 30px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #22c55e;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .status-active {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .current-values {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .current-values h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .value-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .value-row:last-child {
+            border-bottom: none;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <button class="logout-btn hidden" id="logoutBtn" onclick="logout()">Logout</button>
+
+    <div class="container">
+        <h1>AQI Admin Panel</h1>
+
+        <!-- Login Form -->
+        <div id="loginSection" class="login-form">
+            <div id="loginError" class="error hidden"></div>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter password">
+            </div>
+            <button class="btn-primary" onclick="login()">Login</button>
+        </div>
+
+        <!-- Admin Panel -->
+        <div id="adminSection" class="admin-panel hidden">
+            <div id="message" class="hidden"></div>
+
+            <div id="statusBar" class="status status-inactive">
+                Override: Disabled
+            </div>
+
+            <div class="current-values">
+                <h3>Current Override Values</h3>
+                <div class="value-row">
+                    <span>AQI</span>
+                    <span id="currentAqi">-</span>
+                </div>
+                <div class="value-row">
+                    <span>Temperature</span>
+                    <span id="currentTemp">-</span>
+                </div>
+                <div class="value-row">
+                    <span>Humidity</span>
+                    <span id="currentHumidity">-</span>
+                </div>
+                <div class="value-row">
+                    <span>Wind Speed</span>
+                    <span id="currentWind">-</span>
+                </div>
+            </div>
+
+            <div class="toggle-container">
+                <span class="toggle-label">Enable Override</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="enableOverride" onchange="toggleOverride()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="aqiValue">AQI Value (0-500)</label>
+                <input type="number" id="aqiValue" min="0" max="500" placeholder="Leave empty to use real data">
+            </div>
+
+            <div class="form-group">
+                <label for="tempValue">Temperature (°C)</label>
+                <input type="number" id="tempValue" min="-50" max="60" placeholder="Leave empty to use real data">
+            </div>
+
+            <div class="form-group">
+                <label for="humidityValue">Humidity (%)</label>
+                <input type="number" id="humidityValue" min="0" max="100" placeholder="Leave empty to use real data">
+            </div>
+
+            <div class="form-group">
+                <label for="windValue">Wind Speed (m/s)</label>
+                <input type="number" id="windValue" min="0" max="100" step="0.1" placeholder="Leave empty to use real data">
+            </div>
+
+            <button class="btn-success" onclick="saveSettings()">Save Settings</button>
+            <button class="btn-danger" onclick="clearOverrides()">Clear All Overrides</button>
+        </div>
+    </div>
+
+    <script>
+        let authHeader = '';
+
+        // Check if already logged in
+        const savedAuth = sessionStorage.getItem('adminAuth');
+        if (savedAuth) {
+            authHeader = savedAuth;
+            showAdminPanel();
+        }
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showError('loginError', 'Please enter username and password');
+                return;
+            }
+
+            authHeader = 'Basic ' + btoa(username + ':' + password);
+
+            // Test credentials
+            fetch('/api/admin/settings', {
+                headers: { 'Authorization': authHeader }
+            })
+            .then(response => {
+                if (response.ok) {
+                    sessionStorage.setItem('adminAuth', authHeader);
+                    showAdminPanel();
+                    return response.json();
+                } else {
+                    throw new Error('Invalid credentials');
+                }
+            })
+            .then(data => {
+                loadSettings(data.data);
+            })
+            .catch(error => {
+                showError('loginError', 'Invalid username or password');
+                authHeader = '';
+            });
+        }
+
+        function logout() {
+            sessionStorage.removeItem('adminAuth');
+            authHeader = '';
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('adminSection').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.add('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function showAdminPanel() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('adminSection').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('loginError').classList.add('hidden');
+
+            // Load current settings
+            fetch('/api/admin/settings', {
+                headers: { 'Authorization': authHeader }
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadSettings(data.data);
+            });
+        }
+
+        function loadSettings(settings) {
+            document.getElementById('enableOverride').checked = settings.enabled;
+            document.getElementById('aqiValue').value = settings.aqi ?? '';
+            document.getElementById('tempValue').value = settings.temperature ?? '';
+            document.getElementById('humidityValue').value = settings.humidity ?? '';
+            document.getElementById('windValue').value = settings.windSpeed ?? '';
+
+            updateStatusBar(settings.enabled);
+            updateCurrentValues(settings);
+        }
+
+        function updateStatusBar(enabled) {
+            const statusBar = document.getElementById('statusBar');
+            if (enabled) {
+                statusBar.className = 'status status-active';
+                statusBar.textContent = 'Override: ENABLED';
+            } else {
+                statusBar.className = 'status status-inactive';
+                statusBar.textContent = 'Override: Disabled';
+            }
+        }
+
+        function updateCurrentValues(settings) {
+            document.getElementById('currentAqi').textContent = settings.aqi ?? '-';
+            document.getElementById('currentTemp').textContent = settings.temperature ? settings.temperature + '°C' : '-';
+            document.getElementById('currentHumidity').textContent = settings.humidity ? settings.humidity + '%' : '-';
+            document.getElementById('currentWind').textContent = settings.windSpeed ? settings.windSpeed + ' m/s' : '-';
+        }
+
+        function toggleOverride() {
+            saveSettings();
+        }
+
+        function saveSettings() {
+            const settings = {
+                enabled: document.getElementById('enableOverride').checked,
+            };
+
+            const aqi = document.getElementById('aqiValue').value;
+            const temp = document.getElementById('tempValue').value;
+            const humidity = document.getElementById('humidityValue').value;
+            const wind = document.getElementById('windValue').value;
+
+            if (aqi !== '') settings.aqi = parseInt(aqi);
+            if (temp !== '') settings.temperature = parseFloat(temp);
+            if (humidity !== '') settings.humidity = parseInt(humidity);
+            if (wind !== '') settings.windSpeed = parseFloat(wind);
+
+            fetch('/api/admin/settings', {
+                method: 'POST',
+                headers: {
+                    'Authorization': authHeader,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                showMessage('Settings saved successfully!', 'success');
+                loadSettings(data.data);
+            })
+            .catch(error => {
+                showMessage('Failed to save settings', 'error');
+            });
+        }
+
+        function clearOverrides() {
+            fetch('/api/admin/settings', {
+                method: 'DELETE',
+                headers: { 'Authorization': authHeader }
+            })
+            .then(response => response.json())
+            .then(data => {
+                showMessage('Overrides cleared!', 'success');
+                document.getElementById('enableOverride').checked = false;
+                document.getElementById('aqiValue').value = '';
+                document.getElementById('tempValue').value = '';
+                document.getElementById('humidityValue').value = '';
+                document.getElementById('windValue').value = '';
+                updateStatusBar(false);
+                updateCurrentValues({});
+            })
+            .catch(error => {
+                showMessage('Failed to clear overrides', 'error');
+            });
+        }
+
+        function showError(elementId, message) {
+            const el = document.getElementById(elementId);
+            el.textContent = message;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 3000);
+        }
+
+        function showMessage(message, type) {
+            const el = document.getElementById('message');
+            el.textContent = message;
+            el.className = type;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 3000);
+        }
+
+        // Enter key to login
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>

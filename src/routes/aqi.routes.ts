@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import dataService from '../services/data.service';
+import settingsService from '../services/settings.service';
 
 const aqiRoutes: FastifyPluginAsync = async (fastify) => {
   // Get latest AQI data
@@ -122,7 +123,9 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
           error: 'No data found',
         });
       }
-      return reply.send({ success: true, data: data[0] });
+      // Apply admin overrides if enabled
+      const result = settingsService.applyOverrides(data[0]);
+      return reply.send({ success: true, data: result });
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({

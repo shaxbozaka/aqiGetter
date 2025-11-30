@@ -5,6 +5,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import aqiRoutes from './routes/aqi.routes';
+import adminRoutes from './routes/admin.routes';
 import { EventEmitter } from 'events';
 
 // Global event emitter for SSE
@@ -71,8 +72,14 @@ export async function buildApp() {
     return reply.sendFile('dashboard.html');
   });
 
+  // Admin panel route
+  app.get('/admin', async (request, reply) => {
+    return reply.sendFile('admin.html');
+  });
+
   // Register routes
   await app.register(aqiRoutes, { prefix: '/api' });
+  await app.register(adminRoutes, { prefix: '/api/admin' });
 
   // SSE endpoint for real-time updates
   app.get('/api/aqi/stream', async (request, reply) => {

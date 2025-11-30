@@ -7,18 +7,20 @@
  * - Real-time AQI with trend arrow (↑/↓)
  * - Temperature and wind speed
  * - Health recommendations
- * - Notifications when AQI crosses thresholds
  * - Copy AQI to clipboard
  * - Last updated time
+ * - Auto-update checker
  *
  * Compile: swiftc -o aqi-menubar aqi-native-macos.swift
  * Run: ./aqi-menubar
  */
 
 import Cocoa
-import UserNotifications
 
-class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
+// Note: Notifications removed - requires app bundle which command-line Swift doesn't have
+// To add notifications, compile as proper .app bundle with Info.plist
+
+class AQIMenuBar: NSObject {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var updateCheckTimer: Timer?
@@ -40,9 +42,6 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
     func run() {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
-
-        // Request notification permissions
-        requestNotificationPermission()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -82,7 +81,7 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
             DispatchQueue.main.async {
                 if self.isNewerVersion(latest: latestVersion, current: self.currentVersion) {
                     self.updateAvailable = true
-                    self.sendNotification(
+                    self.logNotification(
                         title: "AQI App Update Available",
                         body: "Version \(latestVersion) is available. Click to download."
                     )
@@ -107,85 +106,73 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
         return false
     }
 
-    func requestNotificationPermission() {
-        let center = UNUserNotificationCenter.current()
-        center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
-            if granted {
-                print("Notifications enabled")
-            }
-        }
-    }
-
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound])
-    }
 
     func updateData() {
         guard let aqiUrl = URL(string: "https://aqi.shaxbozaka.cc/api/aqi/current") else {
             return
         }
 
-        var aqi: Int = 0
-        var temp: Double = 0
-        var wind: Double = 0
-        var humidity: Int = 0
-        var status = "Loading..."
+        // Use async URLSession to avoid blocking main thread
+        URLSession.shared.dataTask(with: aqiUrl) { data, response, error in
+            var aqi: Int = 0
+            var temp: Double = 0
+            var wind: Double = 0
+            var humidity: Int = 0
+            var status = "Loading..."
 
-        // Fetch AQI data (includes temperature, wind, humidity)
-        if let data = try? Data(contentsOf: aqiUrl),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let dataObj = json["data"] as? [String: Any] {
+            // Fetch AQI data (includes temperature, wind, humidity)
+            if let data = data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let dataObj = json["data"] as? [String: Any] {
 
-            if let aqiValue = dataObj["aqi_us"] as? Int {
-                aqi = aqiValue
-                status = getStatus(aqi: aqi)
+                if let aqiValue = dataObj["aqi_us"] as? Int {
+                    aqi = aqiValue
+                    status = self.getStatus(aqi: aqi)
+                }
+
+                if let tempValue = dataObj["temperature_celsius"] as? String,
+                   let tempDouble = Double(tempValue) {
+                    temp = tempDouble
+                } else if let tempValue = dataObj["temperature_celsius"] as? Double {
+                    temp = tempValue
+                }
+
+                if let windValue = dataObj["wind_speed_ms"] as? String,
+                   let windDouble = Double(windValue) {
+                    wind = windDouble * 3.6 // Convert to km/h
+                } else if let windValue = dataObj["wind_speed_ms"] as? Double {
+                    wind = windValue * 3.6
+                }
+
+                if let humidityValue = dataObj["humidity"] as? Int {
+                    humidity = humidityValue
+                }
             }
 
-            if let tempValue = dataObj["temperature_celsius"] as? String,
-               let tempDouble = Double(tempValue) {
-                temp = tempDouble
-            } else if let tempValue = dataObj["temperature_celsius"] as? Double {
-                temp = tempValue
+            // Check for threshold crossing and send notification
+            if self.previousAQI > 0 {
+                self.checkThresholdCrossing(oldAQI: self.previousAQI, newAQI: aqi)
             }
 
-            if let windValue = dataObj["wind_speed_ms"] as? String,
-               let windDouble = Double(windValue) {
-                wind = windDouble * 3.6 // Convert to km/h
-            } else if let windValue = dataObj["wind_speed_ms"] as? Double {
-                wind = windValue * 3.6
+            // Store current values
+            let oldAQI = self.previousAQI
+            self.previousAQI = aqi
+            self.currentAQI = aqi
+            self.currentTemp = temp
+            self.currentWind = wind
+            self.currentHumidity = humidity
+            self.lastUpdateTime = Date()
+
+            // Update menu bar on main thread
+            DispatchQueue.main.async {
+                let emoji = self.getEmoji(aqi: aqi)
+                let trend = self.getTrendArrow(oldAQI: oldAQI, newAQI: aqi)
+                self.statusItem.button?.title = "\(Int(temp))° · \(aqi)\(trend) \(emoji)"
+
+                // Create menu
+                self.buildMenu(aqi: aqi, temp: temp, wind: wind, humidity: humidity, status: status)
             }
-
-            if let humidityValue = dataObj["humidity"] as? Int {
-                humidity = humidityValue
-            }
-        }
-
-        // Check for threshold crossing and send notification
-        if previousAQI > 0 {
-            checkThresholdCrossing(oldAQI: previousAQI, newAQI: aqi)
-        }
-
-        // Store current values
-        let oldAQI = previousAQI
-        previousAQI = aqi
-        currentAQI = aqi
-        currentTemp = temp
-        currentWind = wind
-        currentHumidity = humidity
-        lastUpdateTime = Date()
-
-        // Update menu bar
-        DispatchQueue.main.async {
-            let emoji = self.getEmoji(aqi: aqi)
-            let trend = self.getTrendArrow(oldAQI: oldAQI, newAQI: aqi)
-            self.statusItem.button?.title = "\(Int(temp))° · \(aqi)\(trend) \(emoji)"
-
-            // Create menu
-            self.buildMenu(aqi: aqi, temp: temp, wind: wind, humidity: humidity, status: status)
-        }
+        }.resume()
     }
 
     func getTrendArrow(oldAQI: Int, newAQI: Int) -> String {
@@ -200,7 +187,7 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
         for threshold in thresholds {
             // Crossed up (getting worse)
             if oldAQI < threshold && newAQI >= threshold {
-                sendNotification(
+                logNotification(
                     title: "AQI Alert: \(getStatus(aqi: newAQI))",
                     body: "Air quality worsened to \(newAQI). \(getRecommendation(aqi: newAQI))"
                 )
@@ -208,7 +195,7 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
             }
             // Crossed down (getting better)
             if oldAQI >= threshold && newAQI < threshold {
-                sendNotification(
+                logNotification(
                     title: "AQI Improved: \(getStatus(aqi: newAQI))",
                     body: "Air quality improved to \(newAQI). \(getRecommendation(aqi: newAQI))"
                 )
@@ -217,19 +204,9 @@ class AQIMenuBar: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func sendNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request)
+    func logNotification(title: String, body: String) {
+        // Log to console since notifications require app bundle
+        print("📢 \(title): \(body)")
     }
 
     func buildMenu(aqi: Int, temp: Double, wind: Double, humidity: Int, status: String) {
