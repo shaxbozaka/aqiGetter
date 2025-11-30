@@ -20,10 +20,75 @@ import Cocoa
 // Note: Notifications removed - requires app bundle which command-line Swift doesn't have
 // To add notifications, compile as proper .app bundle with Info.plist
 
+// SSE Client for real-time updates
+class SSEClient: NSObject, URLSessionDataDelegate {
+    var onEvent: ((String, String) -> Void)?
+    var task: URLSessionDataTask?
+    var session: URLSession?
+    var reconnectTimer: Timer?
+    let url: URL
+
+    init(url: URL) {
+        self.url = url
+        super.init()
+    }
+
+    func connect() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = TimeInterval(INT_MAX)
+        config.timeoutIntervalForResource = TimeInterval(INT_MAX)
+
+        session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+
+        var request = URLRequest(url: url)
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+
+        task = session?.dataTask(with: request)
+        task?.resume()
+    }
+
+    func disconnect() {
+        task?.cancel()
+        session?.invalidateAndCancel()
+        reconnectTimer?.invalidate()
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let text = String(data: data, encoding: .utf8) else { return }
+
+        // Parse SSE format: "event: type\ndata: json\n\n"
+        let lines = text.components(separatedBy: "\n")
+        var eventType = "message"
+        var eventData = ""
+
+        for line in lines {
+            if line.hasPrefix("event: ") {
+                eventType = String(line.dropFirst(7))
+            } else if line.hasPrefix("data: ") {
+                eventData = String(line.dropFirst(6))
+            }
+        }
+
+        if !eventData.isEmpty {
+            onEvent?(eventType, eventData)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        // Reconnect after 5 seconds on disconnect
+        print("SSE disconnected, reconnecting in 5s...")
+        reconnectTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { _ in
+            self.connect()
+        }
+    }
+}
+
 class AQIMenuBar: NSObject {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var updateCheckTimer: Timer?
+    var sseClient: SSEClient?
     var previousAQI: Int = 0
     var lastUpdateTime: Date?
     var currentAQI: Int = 0
@@ -33,7 +98,7 @@ class AQIMenuBar: NSObject {
     var updateAvailable: Bool = false
 
     // App version - update this when releasing new versions
-    let currentVersion = "1.1.0"
+    let currentVersion = "1.2.0"
     let githubRepo = "shaxbozaka/aqiGetter"
 
     // Notification thresholds
@@ -45,10 +110,14 @@ class AQIMenuBar: NSObject {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
+        // Initial data fetch
         updateData()
 
-        // Update every 60 seconds
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+        // Connect to SSE for real-time updates
+        connectSSE()
+
+        // Fallback: Update every 5 minutes in case SSE fails
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
             self.updateData()
         }
 
@@ -59,6 +128,79 @@ class AQIMenuBar: NSObject {
         }
 
         app.run()
+    }
+
+    func connectSSE() {
+        guard let url = URL(string: "https://aqi.shaxbozaka.cc/api/aqi/stream") else { return }
+
+        sseClient = SSEClient(url: url)
+        sseClient?.onEvent = { [weak self] eventType, data in
+            guard let self = self else { return }
+
+            if eventType == "update" {
+                // Parse the SSE data and update display
+                self.handleSSEUpdate(data: data)
+            } else if eventType == "connected" {
+                print("SSE connected for real-time updates")
+            }
+        }
+        sseClient?.connect()
+    }
+
+    func handleSSEUpdate(data: String) {
+        guard let jsonData = data.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            return
+        }
+
+        var aqi: Int = 0
+        var temp: Double = 0
+        var wind: Double = 0
+        var humidity: Int = 0
+
+        if let aqiValue = json["aqi_us"] as? Int {
+            aqi = aqiValue
+        }
+
+        if let tempValue = json["temperature_celsius"] as? String,
+           let tempDouble = Double(tempValue) {
+            temp = tempDouble
+        } else if let tempValue = json["temperature_celsius"] as? Double {
+            temp = tempValue
+        }
+
+        if let windValue = json["wind_speed_ms"] as? String,
+           let windDouble = Double(windValue) {
+            wind = windDouble * 3.6
+        } else if let windValue = json["wind_speed_ms"] as? Double {
+            wind = windValue * 3.6
+        }
+
+        if let humidityValue = json["humidity"] as? Int {
+            humidity = humidityValue
+        }
+
+        // Check for threshold crossing
+        if self.previousAQI > 0 {
+            self.checkThresholdCrossing(oldAQI: self.previousAQI, newAQI: aqi)
+        }
+
+        let oldAQI = self.previousAQI
+        self.previousAQI = aqi
+        self.currentAQI = aqi
+        self.currentTemp = temp
+        self.currentWind = wind
+        self.currentHumidity = humidity
+        self.lastUpdateTime = Date()
+
+        let emoji = self.getEmoji(aqi: aqi)
+        let trend = self.getTrendArrow(oldAQI: oldAQI, newAQI: aqi)
+        let status = self.getStatus(aqi: aqi)
+
+        self.statusItem.button?.title = "\(Int(temp))° · \(aqi)\(trend) \(emoji)"
+        self.buildMenu(aqi: aqi, temp: temp, wind: wind, humidity: humidity, status: status)
+
+        print("SSE update: AQI \(aqi), Temp \(temp)°C")
     }
 
     func checkForUpdates() {

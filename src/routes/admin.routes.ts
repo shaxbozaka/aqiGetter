@@ -1,5 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import settingsService from '../services/settings.service';
+import dataService from '../services/data.service';
+import { aqiEvents } from '../app';
 
 // Simple auth using environment variables
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
@@ -59,6 +61,18 @@ const adminRoutes = async (fastify: FastifyInstance) => {
 
     const body = request.body as any;
     settingsService.setOverrides(body);
+
+    // Emit SSE event with updated data so menubar app updates instantly
+    try {
+      const latestData = await dataService.getLatestData('Tashkent', 1);
+      if (latestData.length > 0) {
+        const updatedData = settingsService.applyOverrides(latestData[0]);
+        aqiEvents.emit('newData', updatedData);
+      }
+    } catch (err) {
+      // Ignore errors, SSE update is optional
+    }
+
     return reply.send({ success: true, data: settingsService.getOverrides() });
   });
 
@@ -67,6 +81,17 @@ const adminRoutes = async (fastify: FastifyInstance) => {
     if (!checkAuth(request, reply)) return;
 
     settingsService.clearOverrides();
+
+    // Emit SSE event with real data (no overrides)
+    try {
+      const latestData = await dataService.getLatestData('Tashkent', 1);
+      if (latestData.length > 0) {
+        aqiEvents.emit('newData', latestData[0]);
+      }
+    } catch (err) {
+      // Ignore errors
+    }
+
     return reply.send({ success: true, message: 'Overrides cleared' });
   });
 };
