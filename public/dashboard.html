@@ -782,13 +782,30 @@
         function getChangeText(current, previous, label) {
             if (!current || !previous) return { text: `vs ${label}`, class: 'change-same' };
             const diff = current - previous;
-            // Lower AQI = better, so positive diff means worse air quality
-            if (diff > 0) {
-                return { text: `${diff} worse than ${label}`, class: 'change-worse' };
-            } else if (diff < 0) {
-                return { text: `${Math.abs(diff)} better than ${label}`, class: 'change-better' };
+            const absDiff = Math.abs(diff);
+
+            // Determine the intensity word based on the difference
+            let intensity;
+            if (absDiff <= 5) {
+                intensity = 'about the same as';
+            } else if (absDiff <= 15) {
+                intensity = diff > 0 ? 'slightly worse than' : 'slightly better than';
+            } else if (absDiff <= 30) {
+                intensity = diff > 0 ? 'worse than' : 'better than';
+            } else if (absDiff <= 50) {
+                intensity = diff > 0 ? 'much worse than' : 'much better than';
+            } else {
+                intensity = diff > 0 ? 'significantly worse than' : 'significantly better than';
             }
-            return { text: `Same as ${label}`, class: 'change-same' };
+
+            // Lower AQI = better, so positive diff means worse air quality
+            if (absDiff <= 5) {
+                return { text: `${intensity} ${label}`, class: 'change-same' };
+            } else if (diff > 0) {
+                return { text: `${intensity} ${label}`, class: 'change-worse' };
+            } else {
+                return { text: `${intensity} ${label}`, class: 'change-better' };
+            }
         }
 
         async function loadComparisonData() {
