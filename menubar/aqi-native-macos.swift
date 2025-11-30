@@ -10,15 +10,17 @@
  * - Copy AQI to clipboard
  * - Last updated time
  * - Auto-update checker
+ * - Native macOS notifications (when running as .app bundle)
  *
- * Compile: swiftc -o aqi-menubar aqi-native-macos.swift
- * Run: ./aqi-menubar
+ * Build as app bundle:
+ *   ./build-app.sh
+ *
+ * Run:
+ *   open /Applications/AQI\ Indicator.app
  */
 
 import Cocoa
-
-// Note: Notifications removed - requires app bundle which command-line Swift doesn't have
-// To add notifications, compile as proper .app bundle with Info.plist
+import UserNotifications
 
 class AQIMenuBar: NSObject {
     var statusItem: NSStatusItem!
@@ -45,6 +47,9 @@ class AQIMenuBar: NSObject {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
+        // Request notification permissions
+        requestNotificationPermission()
+
         updateData()
 
         // Update every 30 seconds for faster response to admin changes
@@ -59,6 +64,17 @@ class AQIMenuBar: NSObject {
         }
 
         app.run()
+    }
+
+    func requestNotificationPermission() {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if granted {
+                print("Notifications enabled")
+            } else if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
     }
 
     func checkForUpdates() {
@@ -81,7 +97,7 @@ class AQIMenuBar: NSObject {
             DispatchQueue.main.async {
                 if self.isNewerVersion(latest: latestVersion, current: self.currentVersion) {
                     self.updateAvailable = true
-                    self.logNotification(
+                    self.sendNotification(
                         title: "AQI App Update Available",
                         body: "Version \(latestVersion) is available. Click to download."
                     )
@@ -205,7 +221,7 @@ class AQIMenuBar: NSObject {
         for threshold in thresholds {
             // Crossed up (getting worse)
             if oldAQI < threshold && newAQI >= threshold {
-                logNotification(
+                sendNotification(
                     title: "AQI Alert: \(getStatus(aqi: newAQI))",
                     body: "Air quality worsened to \(newAQI). \(getRecommendation(aqi: newAQI))"
                 )
@@ -213,7 +229,7 @@ class AQIMenuBar: NSObject {
             }
             // Crossed down (getting better)
             if oldAQI >= threshold && newAQI < threshold {
-                logNotification(
+                sendNotification(
                     title: "AQI Improved: \(getStatus(aqi: newAQI))",
                     body: "Air quality improved to \(newAQI). \(getRecommendation(aqi: newAQI))"
                 )
@@ -222,8 +238,21 @@ class AQIMenuBar: NSObject {
         }
     }
 
-    func logNotification(title: String, body: String) {
-        // Log to console since notifications require app bundle
+    func sendNotification(title: String, body: String) {
+        // Use AppleScript for notifications - works without special permissions
+        let script = """
+            display notification "\(body.replacingOccurrences(of: "\"", with: "\\\""))" with title "\(title.replacingOccurrences(of: "\"", with: "\\\""))" sound name "default"
+            """
+
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+            if let error = error {
+                print("AppleScript error: \(error)")
+            }
+        }
+
+        // Also log to console
         print("📢 \(title): \(body)")
     }
 
