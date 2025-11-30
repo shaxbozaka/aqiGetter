@@ -654,9 +654,15 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         let trendChart;
-        let currentMode = 'hours'; // 'hours' or 'period'
-        let currentHours = 6;
-        let currentPeriod = 'week';
+
+        // Load saved period from sessionStorage (persists during tab session, resets on new tab)
+        const savedMode = sessionStorage.getItem('aqiMode');
+        const savedHours = sessionStorage.getItem('aqiHours');
+        const savedPeriod = sessionStorage.getItem('aqiPeriod');
+
+        let currentMode = savedMode || 'hours';
+        let currentHours = savedHours ? parseInt(savedHours) : 6;
+        let currentPeriod = savedPeriod || 'week';
 
         const aqiLevels = [
             { max: 50, label: 'Good', class: 'aqi-good', recommendation: 'Air quality is great! Perfect day for outdoor activities.', color: '#22c55e' },
@@ -954,11 +960,17 @@
             if (hours) {
                 currentMode = 'hours';
                 currentHours = hours;
+                // Save to sessionStorage
+                sessionStorage.setItem('aqiMode', 'hours');
+                sessionStorage.setItem('aqiHours', hours.toString());
                 const data = await fetchHistoricalData(hours);
                 createTrendChart(data, false);
             } else if (period) {
                 currentMode = 'period';
                 currentPeriod = period;
+                // Save to sessionStorage
+                sessionStorage.setItem('aqiMode', 'period');
+                sessionStorage.setItem('aqiPeriod', period);
                 const data = await fetchAggregatedData(period);
                 createTrendChart(data, true, period);
             }
@@ -972,6 +984,19 @@
                 changeTimeRange(this, hours, period);
             });
         });
+
+        // Highlight the correct button based on saved state
+        function highlightActiveButton() {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            if (currentMode === 'hours') {
+                const btn = document.querySelector(`.period-btn[data-hours="${currentHours}"]`);
+                if (btn) btn.classList.add('active');
+            } else {
+                const btn = document.querySelector(`.period-btn[data-period="${currentPeriod}"]`);
+                if (btn) btn.classList.add('active');
+            }
+        }
+        highlightActiveButton();
 
         async function loadDashboard() {
             try {
