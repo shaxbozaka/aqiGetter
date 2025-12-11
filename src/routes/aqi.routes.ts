@@ -151,6 +151,10 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
       }
       // Apply admin overrides for indicator only
       const result = settingsService.applyOverrides(data[0]);
+      // Disable caching for real-time indicator data
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
       return reply.send({ success: true, data: result });
     } catch (error) {
       fastify.log.error(error);
