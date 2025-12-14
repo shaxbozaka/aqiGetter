@@ -224,6 +224,55 @@ const aqiRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   });
+
+  // Combined dashboard endpoint - fetches all data in one request
+  fastify.get('/aqi/dashboard', {
+    schema: {
+      description: 'Get all dashboard data in a single request (current, chart, comparison)',
+      tags: ['AQI'],
+      querystring: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', default: 'Tashkent' },
+          hours: { type: 'number', description: 'Hours for chart data (use this OR period)' },
+          period: { type: 'string', enum: ['week', 'month', 'year'], description: 'Period for aggregated chart data' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { city = 'Tashkent', hours, period } = request.query as {
+      city?: string;
+      hours?: number;
+      period?: 'week' | 'month' | 'year';
+    };
+
+    try {
+      // Fetch all data in parallel
+      const [currentData, comparisonData, chartData] = await Promise.all([
+        dataService.getLatestData(city, 1),
+        dataService.getComparisonStats(city),
+        period
+          ? dataService.getAggregatedData(city, period, period === 'year' ? 'week' : 'day')
+          : dataService.getDataByHours(city, hours || 6),
+      ]);
+
+      return reply.send({
+        success: true,
+        data: {
+          current: currentData[0] || null,
+          comparison: comparisonData,
+          chart: chartData,
+          chartType: period ? 'aggregated' : 'hourly',
+        },
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: 'Failed to fetch dashboard data',
+      });
+    }
+  });
 };
 
 export default aqiRoutes;

@@ -760,29 +760,28 @@
             });
         }
 
-        async function fetchCurrentData() {
-            const response = await fetch('/api/aqi/current');
-            const result = await response.json();
-            return result.data;
-        }
-
-        async function fetchHistoricalData(hours) {
-            const response = await fetch(`/api/aqi/latest?hours=${hours}`);
-            const result = await response.json();
-            return result.data || [];
-        }
-
-        async function fetchAggregatedData(period) {
-            const granularity = period === 'year' ? 'week' : 'day';
-            const response = await fetch(`/api/aqi/history?period=${period}&granularity=${granularity}`);
-            const result = await response.json();
-            return result.data || [];
-        }
-
-        async function fetchComparisonData() {
-            const response = await fetch('/api/aqi/comparison');
+        // Combined dashboard fetch - single request for all data
+        async function fetchDashboardData(hours = null, period = null) {
+            const params = new URLSearchParams();
+            if (hours) params.set('hours', hours);
+            if (period) params.set('period', period);
+            const response = await fetch(`/api/aqi/dashboard?${params}`);
             const result = await response.json();
             return result.data || {};
+        }
+
+        // Keep individual fetches for chart updates only
+        async function fetchChartData(hours = null, period = null) {
+            if (period) {
+                const granularity = period === 'year' ? 'week' : 'day';
+                const response = await fetch(`/api/aqi/history?period=${period}&granularity=${granularity}`);
+                const result = await response.json();
+                return { data: result.data || [], type: 'aggregated' };
+            } else {
+                const response = await fetch(`/api/aqi/latest?hours=${hours || 6}`);
+                const result = await response.json();
+                return { data: result.data || [], type: 'hourly' };
+            }
         }
 
         function getChangeText(current, previous, label) {
@@ -814,38 +813,34 @@
             }
         }
 
-        async function loadComparisonData() {
-            try {
-                const data = await fetchComparisonData();
+        function updateComparisonUI(data) {
+            if (!data) return;
 
-                // Today vs Yesterday
-                if (data.today) {
-                    document.getElementById('todayAqi').textContent = data.today.avg_aqi || '--';
-                    const todayChange = getChangeText(data.today.avg_aqi, data.yesterday?.avg_aqi, 'yesterday');
-                    const todayEl = document.getElementById('todayChange');
-                    todayEl.textContent = todayChange.text;
-                    todayEl.className = `comparison-change ${todayChange.class}`;
-                }
+            // Today vs Yesterday
+            if (data.today) {
+                document.getElementById('todayAqi').textContent = data.today.avg_aqi || '--';
+                const todayChange = getChangeText(data.today.avg_aqi, data.yesterday?.avg_aqi, 'yesterday');
+                const todayEl = document.getElementById('todayChange');
+                todayEl.textContent = todayChange.text;
+                todayEl.className = `comparison-change ${todayChange.class}`;
+            }
 
-                // This Week vs Last Week
-                if (data.this_week) {
-                    document.getElementById('weekAqi').textContent = data.this_week.avg_aqi || '--';
-                    const weekChange = getChangeText(data.this_week.avg_aqi, data.last_week?.avg_aqi, 'last week');
-                    const weekEl = document.getElementById('weekChange');
-                    weekEl.textContent = weekChange.text;
-                    weekEl.className = `comparison-change ${weekChange.class}`;
-                }
+            // This Week vs Last Week
+            if (data.this_week) {
+                document.getElementById('weekAqi').textContent = data.this_week.avg_aqi || '--';
+                const weekChange = getChangeText(data.this_week.avg_aqi, data.last_week?.avg_aqi, 'last week');
+                const weekEl = document.getElementById('weekChange');
+                weekEl.textContent = weekChange.text;
+                weekEl.className = `comparison-change ${weekChange.class}`;
+            }
 
-                // This Month vs Last Month
-                if (data.this_month) {
-                    document.getElementById('monthAqi').textContent = data.this_month.avg_aqi || '--';
-                    const monthChange = getChangeText(data.this_month.avg_aqi, data.last_month?.avg_aqi, 'last month');
-                    const monthEl = document.getElementById('monthChange');
-                    monthEl.textContent = monthChange.text;
-                    monthEl.className = `comparison-change ${monthChange.class}`;
-                }
-            } catch (error) {
-                console.error('Error loading comparison data:', error);
+            // This Month vs Last Month
+            if (data.this_month) {
+                document.getElementById('monthAqi').textContent = data.this_month.avg_aqi || '--';
+                const monthChange = getChangeText(data.this_month.avg_aqi, data.last_month?.avg_aqi, 'last month');
+                const monthEl = document.getElementById('monthChange');
+                monthEl.textContent = monthChange.text;
+                monthEl.className = `comparison-change ${monthChange.class}`;
             }
         }
 
@@ -960,20 +955,18 @@
             if (hours) {
                 currentMode = 'hours';
                 currentHours = hours;
-                // Save to sessionStorage
                 sessionStorage.setItem('aqiMode', 'hours');
                 sessionStorage.setItem('aqiHours', hours.toString());
-                const data = await fetchHistoricalData(hours);
-                createTrendChart(data, false);
             } else if (period) {
                 currentMode = 'period';
                 currentPeriod = period;
-                // Save to sessionStorage
                 sessionStorage.setItem('aqiMode', 'period');
                 sessionStorage.setItem('aqiPeriod', period);
-                const data = await fetchAggregatedData(period);
-                createTrendChart(data, true, period);
             }
+
+            // Fetch only chart data for time range changes
+            const chartResult = await fetchChartData(hours, period);
+            createTrendChart(chartResult.data, chartResult.type === 'aggregated', period);
         }
 
         // Setup period button click handlers
@@ -1000,16 +993,15 @@
 
         async function loadDashboard() {
             try {
-                // Fetch current data and chart data based on current mode
-                const currentPromise = fetchCurrentData();
-                const chartPromise = currentMode === 'hours'
-                    ? fetchHistoricalData(currentHours)
-                    : fetchAggregatedData(currentPeriod);
+                // Single request for all dashboard data
+                const hours = currentMode === 'hours' ? currentHours : null;
+                const period = currentMode === 'period' ? currentPeriod : null;
+                const dashboardData = await fetchDashboardData(hours, period);
 
-                const [current, chartData] = await Promise.all([currentPromise, chartPromise]);
+                const { current, comparison, chart, chartType } = dashboardData;
 
-                // Load comparison data
-                loadComparisonData();
+                // Update comparison section
+                updateComparisonUI(comparison);
 
                 if (current) {
                     const aqi = current.aqi_us;
@@ -1037,8 +1029,8 @@
                 }
 
                 // Update chart with the fetched data
-                if (chartData && chartData.length > 0) {
-                    createTrendChart(chartData, currentMode === 'period', currentPeriod);
+                if (chart && chart.length > 0) {
+                    createTrendChart(chart, chartType === 'aggregated', currentPeriod);
                 }
 
                 // Update time
