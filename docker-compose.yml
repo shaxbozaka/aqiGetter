@@ -35,6 +35,7 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       IQAIR_API_KEY: ${IQAIR_API_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://aqi.shaxbozaka.cc}
       LOG_LEVEL: info
     ports:
       - "3001:3000"
