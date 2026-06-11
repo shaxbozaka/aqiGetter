@@ -29,6 +29,9 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy font assets for OG image rendering
+COPY --from=builder /app/assets ./assets
+
 # Copy public directory with static assets
 COPY --from=builder /app/public ./public
 

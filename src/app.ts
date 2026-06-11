@@ -4,8 +4,11 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
+import fs from 'fs';
 import aqiRoutes from './routes/aqi.routes';
 import adminRoutes from './routes/admin.routes';
+import dataService from './services/data.service';
+import { buildOgTags, injectOgTags, renderOgImage, rowToOgData, OgData } from './services/og.service';
 import { EventEmitter } from 'events';
 
 // Global event emitter for SSE
@@ -67,9 +70,54 @@ export async function buildApp() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // Dashboard route
+  const dashboardTemplate = fs.readFileSync(
+    path.join(__dirname, '../public/dashboard.html'),
+    'utf-8'
+  );
+
+  const resolveBaseUrl = (request: { headers: Record<string, unknown>; protocol: string }): string => {
+    if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL;
+    const proto = (request.headers['x-forwarded-proto'] as string) || request.protocol;
+    const host = request.headers.host as string;
+    return `${proto}://${host}`;
+  };
+
+  const getCurrentOgData = async (): Promise<OgData | null> => {
+    const rows = await dataService.getLatestData('Tashkent', 1);
+    return rows.length > 0 ? rowToOgData(rows[0]) : null;
+  };
+
+  // Dashboard route with live Open Graph tags for link previews (Telegram, etc.)
   app.get('/', async (request, reply) => {
-    return reply.sendFile('dashboard.html');
+    reply.header('Cache-Control', 'public, max-age=300');
+    reply.type('text/html');
+
+    try {
+      const ogData = await getCurrentOgData();
+      if (ogData) {
+        const tags = buildOgTags(ogData, resolveBaseUrl(request));
+        return reply.send(injectOgTags(dashboardTemplate, tags));
+      }
+    } catch (error) {
+      app.log.error(error, 'Failed to build OG tags, serving plain dashboard');
+    }
+    return reply.send(dashboardTemplate);
+  });
+
+  // Open Graph preview image (1200x630 PNG with current AQI)
+  app.get('/og-image.png', async (request, reply) => {
+    try {
+      const ogData = await getCurrentOgData();
+      if (!ogData) {
+        return reply.status(404).send({ success: false, error: 'No data found' });
+      }
+      reply.header('Cache-Control', 'public, max-age=300');
+      reply.type('image/png');
+      return reply.send(renderOgImage(ogData));
+    } catch (error) {
+      app.log.error(error, 'Failed to render OG image');
+      return reply.status(500).send({ success: false, error: 'Failed to render image' });
+    }
   });
 
   // Admin panel route
